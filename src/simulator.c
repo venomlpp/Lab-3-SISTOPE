@@ -3,6 +3,7 @@
 #include <string.h>
 #include <getopt.h>
 #include "simulator.h"
+#include <pthread.h>
 
 // Inicializar con valores por defecto
 sim_config_t config = {
@@ -85,14 +86,47 @@ void parse_arguments(int argc, char *argv[]) {
     }
 }
 
+// Rutina que ejecutará cada hilo
+void *thread_routine(void *arg) {
+    int thread_id = *(int *)arg;
+    free(arg); 
+    
+    // Semilla única por thread para reproducibilidad
+    unsigned int thread_seed = config.seed + thread_id; 
+
+    for (int i = 0; i < config.ops_per_thread; i++) {
+        virtual_addr_t va = generate_address(&thread_seed);
+        
+        // Debug temporal para verificar que generan direcciones
+        // if (i == 0) printf("[Thread %d] Primera VA -> ID: %lu, Offset: %lu\n", thread_id, va.id, va.offset);
+    }
+    
+    return NULL;
+}
+
 int main(int argc, char *argv[]) {
     parse_arguments(argc, argv);
 
-    // Solo para verificar que lee bien:
-    printf("Simulador iniciado en modo: %s\n", config.mode == MODE_SEG ? "Segmentacion" : "Paginacion");
-    printf("Threads: %d, Semilla: %d\n", config.threads, config.seed);
+    printf("Iniciando simulador (%s) con %d hilo(s)...\n", 
+           config.mode == MODE_SEG ? "Segmentacion" : "Paginacion", config.threads);
 
-    // Próximo paso: Lanzar hilos aquí...
+    pthread_t *threads = malloc(sizeof(pthread_t) * config.threads);
+
+    for (int i = 0; i < config.threads; i++) {
+        int *id = malloc(sizeof(int));
+        *id = i;
+        if (pthread_create(&threads[i], NULL, thread_routine, id) != 0) {
+            perror("Error creando hilo");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    for (int i = 0; i < config.threads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    free(threads);
+    printf("Simulacion finalizada.\n");
 
     return 0;
 }
