@@ -24,13 +24,26 @@ run: all
 	./$(TARGET) --mode seg --stats
 
 reproduce: all
-	@echo "Ejecutando Experimento 1..."
+	@echo "Ejecutando Experimento 1 (Segmentacion)..."
 	./$(TARGET) --mode seg --threads 1 --workload uniform --ops-per-thread 10000 --segments 4 --seg-limits 1024,2048,4096,8192 --seed 100 --stats
-	@echo "\nEjecutando Experimento 2..."
-	./$(TARGET) --mode page --threads 1 --workload 80-20 --ops-per-thread 50000 --pages 128 --frames 64 --page-size 4096 --tlb-size 32 --tlb-policy fifo --seed 200 --stats
-	@echo "\nEjecutando Experimento 3..."
-	./$(TARGET) --mode page --threads 8 --workload uniform --ops-per-thread 10000 --pages 64 --frames 8 --page-size 4096 --tlb-size 16 --seed 300 --stats
+	mv out/summary.json out/summary_exp1.json
+	
+	@echo "\nEjecutando Experimento 2.1 (Sin TLB)..."
+	./$(TARGET) --mode page --threads 1 --workload 80-20 --ops-per-thread 50000 --pages 128 --frames 64 --page-size 4096 --tlb-size 0 --tlb-policy fifo --seed 200 --stats
+	mv out/summary.json out/summary_exp2_sin_tlb.json
 
+	@echo "\nEjecutando Experimento 2.2 (Con TLB)..."
+	./$(TARGET) --mode page --threads 1 --workload 80-20 --ops-per-thread 50000 --pages 128 --frames 64 --page-size 4096 --tlb-size 32 --tlb-policy fifo --seed 200 --stats
+	mv out/summary.json out/summary_exp2_con_tlb.json
+	
+	@echo "\nEjecutando Experimento 3.1 (1 Thread)..."
+	./$(TARGET) --mode page --threads 1 --workload uniform --ops-per-thread 10000 --pages 64 --frames 8 --page-size 4096 --tlb-size 16 --seed 300 --stats
+	mv out/summary.json out/summary_exp3_1_thread.json
+
+	@echo "\nEjecutando Experimento 3.2 (8 Threads - Thrashing)..."
+	./$(TARGET) --mode page --threads 8 --workload uniform --ops-per-thread 10000 --pages 64 --frames 8 --page-size 4096 --tlb-size 16 --seed 300 --stats
+	mv out/summary.json out/summary_exp3_8_threads.json
+	
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET) $(OUT_DIR)/*.json
 

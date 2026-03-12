@@ -1,0 +1,19 @@
+{
+  "mode": "page",
+  "config": {
+    "threads": 8,
+    "ops_per_thread": 10000,
+    "workload": "uniform",
+    "seed": 300,
+    "unsafe": false
+    "use_dirty_pages": false
+  },
+  "metrics": {
+    "translations_ok": 80000,
+    "tlb_hits": 1321,
+    "tlb_misses": 78679,
+    "avg_translation_time_ns": 253704.94,
+    "throughput_ops_sec": 3941.59
+  },
+  "runtime_sec": 20.2964
+}

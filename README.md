@@ -65,3 +65,44 @@ Simula el cuello de botella cuando 8 procesos compiten por solo 4 marcos físico
 ```bash
 ./simulator --mode page --threads 8 --frames 4 --workload uniform --ops-per-thread 10000 --seed 123 --stats
 ```
+
+---
+
+## Análisis de Resultados (Experimentos Obligatorios)
+
+### Experimento 1: Segmentación con Segfaults Controlados
+**Objetivo:** Demostrar que la segmentación detecta correctamente violaciones de límite.
+
+| Métrica | Resultado |
+| :--- | :--- |
+| **Translations OK** | 4721 |
+| **Segfaults** | 5279 |
+| **Avg Translation Time** | 48.49 ns |
+| **Throughput (ops/seg)** | 20,622,638.71 |
+
+**Análisis:**
+Los resultados reflejan exactamente el comportamiento esperado de protección de memoria por hardware en un esquema de segmentación. Al emplear un generador de direcciones uniforme (`--workload uniform`) y configurar 4 segmentos con límites muy variados (1024, 2048, 4096, 8192), una proporción significativa de los offsets aleatorios generados excedió el límite permitido para su segmento correspondiente. El simulador detectó correctamente estas violaciones, deteniendo el acceso y contabilizando los 5279 *Segfaults*, mientras que los 4721 accesos que sí respetaron los límites (`offset < limit`) se tradujeron con éxito.
+
+### Experimento 2: Impacto del TLB (Paginación)
+**Objetivo:** Comparar performance con y sin TLB usando el mismo workload (80-20).
+
+| Configuración | TLB Hits | TLB Misses | Hit Rate | Tiempo Total (s) | Throughput (ops/s) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Sin TLB (Size 0)** | 0 | 50000 | 0.00% | 15.5609 | 3213.19 |
+| **Con TLB (Size 32)** | 31799 | 18201 | 63.60% | 15.5783 | 3209.59 |
+
+**Análisis:**
+Al utilizar el workload "80-20", que simula el principio de localidad espacial y temporal, observamos la efectividad de la caché TLB. Con la TLB activada (tamaño 32), el sistema logró un Hit Rate del 63.60% (31,799 aciertos), evitando ir a la Tabla de Páginas para la mayoría de las traducciones.
+*Observación de rendimiento:* Aunque la lógica dictaría que el *Throughput* debería aumentar significativamente con la TLB, los tiempos resultaron casi idénticos (~3213 vs ~3209 ops/sec). Esto se debe a un detalle específico de la simulación: el retardo (`nanosleep`) penaliza los accesos a "disco" (Page Faults), pero la simple lectura de la Tabla de Páginas en RAM ocurre a velocidad de CPU. Aún así, la alta tasa de aciertos cumple el objetivo de demostrar teóricamente el impacto positivo de la TLB.
+
+### Experimento 3: Thrashing con Múltiples Threads
+**Objetivo:** Observar thrashing cuando hay más páginas activas que frames disponibles.
+
+| Hilos Activos | Total Ops | TLB Misses | Miss Rate | Avg Trans. Time | Throughput (ops/s) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1 Thread** | 10000 | 8783 | 87.83% | 1,809,279.01 ns | 552.71 |
+| **8 Threads**| 80000 | 78679 | 98.35% | 253,704.94 ns | 3941.59 |
+
+**Análisis:**
+En este escenario forzamos una escasez severa de memoria física (solo 8 marcos compartidos para 64 páginas virtuales por hilo). Al inyectar 8 hilos de forma concurrente con un acceso uniforme, el sistema entra en un estado de **Thrashing**. La tasa de *TLB Misses* escala a un crítico 98.35%, lo que evidencia que los hilos se roban mutuamente los marcos disponibles. El sistema pasa la gran mayoría de su tiempo ejecutando rutinas de expulsión (Eviction FIFO) y simulando la carga desde disco, en lugar de realizar trabajo útil.
+*Nota de concurrencia:* Curiosamente, el Throughput general aumentó de ~552 a ~3941 ops/sec al usar 8 hilos. Esto es un artefacto de la simulación multiproceso de I/O: como los *Page Faults* se simulan bloqueando el hilo con `nanosleep`, el planificador del SO aprovecha este tiempo muerto para ejecutar otros hilos. Este solapamiento de esperas (I/O overlap) aumenta la cantidad de operaciones completadas por segundo a nivel global, ocultando el hecho de que individualmente los hilos sufren latencias masivas por la contención de memoria.

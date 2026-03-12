@@ -1,0 +1,18 @@
+{
+  "mode": "seg",
+  "config": {
+    "threads": 1,
+    "ops_per_thread": 10000,
+    "workload": "uniform",
+    "seed": 100,
+    "unsafe": false
+    "use_dirty_pages": false
+  },
+  "metrics": {
+    "translations_ok": 4721,
+    "segfaults": 5279,
+    "avg_translation_time_ns": 48.49,
+    "throughput_ops_sec": 20622638.71
+  },
+  "runtime_sec": 0.0005
+}

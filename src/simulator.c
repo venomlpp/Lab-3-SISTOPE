@@ -209,6 +209,17 @@ int main(int argc, char *argv[]) {
             printf("Hard Page Faults (Out of Memory/Error): %lu\n", global_segfaults);
         }
         
+        printf("\nMetricas por Thread:\n");
+        for (int i = 0; i < config.threads; i++) {
+            if (config.mode == MODE_SEG) {
+                printf("  Thread %d: Translations OK: %d, Segfaults: %d\n", 
+                       i, t_stats[i].translations_ok, t_stats[i].segfaults);
+            } else if (config.mode == MODE_PAGE) {
+                printf("  Thread %d: Translations OK: %d, TLB Hits: %d, TLB Misses: %d\n", 
+                       i, t_stats[i].translations_ok, global_tlbs[i]->hits, global_tlbs[i]->misses);
+            }
+        }
+        
         printf("\nTiempo total: %.4f segundos\n", runtime_sec);
         printf("Throughput: %.2f ops/seg\n", throughput);
         printf("Avg Translation Time: %.2f ns\n", avg_translation_ns);
