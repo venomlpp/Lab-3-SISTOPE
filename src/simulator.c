@@ -24,7 +24,6 @@ uint64_t global_translations_ok = 0;
 uint64_t global_segfaults = 0;
 pthread_mutex_t global_stats_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// Arreglos globales para que paginacion.c pueda hacer invalidaciones cruzadas
 page_table_t **global_pts = NULL;
 tlb_t **global_tlbs = NULL;
 
@@ -33,6 +32,9 @@ void print_usage() {
     exit(EXIT_FAILURE);
 }
 
+/**
+ * Analiza y carga los argumentos ingresados por la interfaz de línea de comandos.
+ */
 void parse_arguments(int argc, char *argv[]) {
     int c;
     strcpy(config.tlb_policy, "fifo"); strcpy(config.evict_policy, "fifo");
@@ -87,6 +89,9 @@ void parse_arguments(int argc, char *argv[]) {
     if (config.mode == MODE_NONE) { fprintf(stderr, "Error: --mode es obligatorio.\n"); print_usage(); }
 }
 
+/**
+ * Lógica principal concurrente delegada a los hilos de ejecución.
+ */
 void *thread_routine(void *arg) {
     int thread_id = *(int *)arg;
     free(arg); 
@@ -113,16 +118,13 @@ void *thread_routine(void *arg) {
         } else if (config.mode == MODE_PAGE) {
             uint64_t pa;
             
-            // 1. Intentar en la TLB (Caché rápida)
             int frame = tlb_lookup(tlb, va.id, va.is_write);
             if (frame != -1) {
                 pa = (frame * config.page_size) + va.offset;
                 success = true;
             } else {
-                // 2. TLB Miss -> Ir a Page Table (Puede causar Page Fault y Eviction)
                 success = translate_page(thread_id, page_table, va, &pa);
                 if (success) {
-                    // 3. Si fue exitoso, guardar en TLB
                     tlb_insert(tlb, va.id, page_table->entries[va.id].frame_number, va.is_write);
                 }
             }
@@ -145,7 +147,6 @@ int main(int argc, char *argv[]) {
     parse_arguments(argc, argv);
     t_stats = calloc(config.threads, sizeof(thread_stats_t));
 
-    // Inicializar infra de Paginación global antes de lanzar hilos
     if (config.mode == MODE_PAGE) {
         init_frame_allocator();
         global_pts = malloc(sizeof(page_table_t*) * config.threads);
@@ -203,7 +204,6 @@ int main(int argc, char *argv[]) {
         if (config.mode == MODE_SEG) {
             printf("Segfaults: %lu\n", global_segfaults);
         } else if (config.mode == MODE_PAGE) {
-            // Un page fault ocurre cada vez que hay un TLB miss y la pagina no esta validada
             printf("TLB Hits: %lu\n", total_tlb_hits);
             printf("TLB Misses: %lu\n", total_tlb_misses);
             printf("Hard Page Faults (Out of Memory/Error): %lu\n", global_segfaults);
@@ -212,14 +212,14 @@ int main(int argc, char *argv[]) {
         printf("\nMetricas por Thread:\n");
         for (int i = 0; i < config.threads; i++) {
             if (config.mode == MODE_SEG) {
-                printf("  Thread %d: Translations OK: %d, Segfaults: %d\n", 
+                printf("  Thread %d: Translations OK: %d, Segfaults/Misses: %d\n", 
                        i, t_stats[i].translations_ok, t_stats[i].segfaults);
             } else if (config.mode == MODE_PAGE) {
                 printf("  Thread %d: Translations OK: %d, TLB Hits: %d, TLB Misses: %d\n", 
                        i, t_stats[i].translations_ok, global_tlbs[i]->hits, global_tlbs[i]->misses);
             }
         }
-        
+
         printf("\nTiempo total: %.4f segundos\n", runtime_sec);
         printf("Throughput: %.2f ops/seg\n", throughput);
         printf("Avg Translation Time: %.2f ns\n", avg_translation_ns);
@@ -234,7 +234,7 @@ int main(int argc, char *argv[]) {
         fprintf(f, "    \"ops_per_thread\": %d,\n", config.ops_per_thread);
         fprintf(f, "    \"workload\": \"%s\",\n", config.workload == WORKLOAD_UNIFORM ? "uniform" : "80-20");
         fprintf(f, "    \"seed\": %d,\n", config.seed);
-        fprintf(f, "    \"unsafe\": %s\n", config.unsafe ? "true" : "false");
+        fprintf(f, "    \"unsafe\": %s,\n", config.unsafe ? "true" : "false");
         fprintf(f, "    \"use_dirty_pages\": %s\n", config.use_dirty_pages ? "true" : "false");
         fprintf(f, "  },\n");
         fprintf(f, "  \"metrics\": {\n");

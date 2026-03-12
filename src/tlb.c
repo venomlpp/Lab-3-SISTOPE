@@ -16,7 +16,6 @@ int tlb_lookup(tlb_t *tlb, uint64_t vpn, bool is_write) {
     for (int i = 0; i < tlb->size; i++) {
         if (tlb->entries[i].valid && tlb->entries[i].vpn == vpn) {
             tlb->hits++;
-            // Si es un acierto y además es escritura, ensuciamos la página en caché
             if (is_write) tlb->entries[i].dirty = true;
             return tlb->entries[i].frame_number;
         }
@@ -25,8 +24,12 @@ int tlb_lookup(tlb_t *tlb, uint64_t vpn, bool is_write) {
     return -1;
 }
 
+/**
+ * Inserta una traducción en la caché TLB utilizando la política FIFO.
+ * Omitido internamente si la TLB está configurada con tamaño 0.
+ */
 void tlb_insert(tlb_t *tlb, uint64_t vpn, int frame_number, bool is_write) {
-    if (tlb->size == 0) return; // Evitamos división por cero
+    if (tlb->size == 0) return; 
     tlb->entries[tlb->fifo_ptr].vpn = vpn;
     tlb->entries[tlb->fifo_ptr].frame_number = frame_number;
     tlb->entries[tlb->fifo_ptr].valid = true;
@@ -39,7 +42,7 @@ bool tlb_invalidate(tlb_t *tlb, uint64_t vpn) {
     for (int i = 0; i < tlb->size; i++) {
         if (tlb->entries[i].valid && tlb->entries[i].vpn == vpn) {
             tlb->entries[i].valid = false;
-            return tlb->entries[i].dirty; // Retornamos si estaba sucia para avisar a la Page Table
+            return tlb->entries[i].dirty;
         }
     }
     return false;

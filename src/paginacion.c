@@ -5,7 +5,6 @@
 #include "frame_allocator.h"
 #include "tlb.h"
 
-// Referencias a los arreglos globales (definidos en simulator.c)
 extern page_table_t **global_pts;
 extern tlb_t **global_tlbs;
 
@@ -23,49 +22,45 @@ void free_page_table(page_table_t *pt) {
     }
 }
 
+/**
+ * Traduce una dirección virtual a física utilizando la tabla de páginas.
+ * Maneja los fallos de página simulando latencia de disco y gestionando la asignación
+ * de marcos de memoria mediante el allocador global.
+ */
 bool translate_page(int thread_id, page_table_t *pt, virtual_addr_t va, uint64_t *pa) {
     if (va.id >= (uint64_t)pt->num_pages) return false;
 
     if (!pt->entries[va.id].valid) {
-        // PAGE FAULT: Simular latencia de ir a disco (2 milisegundos)
         struct timespec req = {0, 2000000}; 
         nanosleep(&req, NULL);
 
         int evicted_thread = -1;
         uint64_t evicted_vpn = 0;
         
-        // Asignar frame (esto podría expulsar la página de alguien más por FIFO)
         int frame = allocate_frame(thread_id, va.id, &evicted_thread, &evicted_vpn);
         
         if (frame != -1) {
-            // Si se expulsó a alguien, invalidar su Tabla de Páginas y su TLB
             if (evicted_thread != -1) {
-                
-                // ---- BONUS: LÓGICA DE DIRTY PAGES (WRITE-BACK) ----
-                // Si la opción está activa y la página expulsada estaba sucia, toma otros 2ms escribirla a disco
                 if (config.use_dirty_pages && global_pts[evicted_thread]->entries[evicted_vpn].dirty) {
                     nanosleep(&req, NULL); 
                 }
 
                 global_pts[evicted_thread]->entries[evicted_vpn].valid = false;
-                global_pts[evicted_thread]->entries[evicted_vpn].dirty = false; // Limpiamos el estado
+                global_pts[evicted_thread]->entries[evicted_vpn].dirty = false;
                 tlb_invalidate(global_tlbs[evicted_thread], evicted_vpn);
             }
 
             pt->entries[va.id].frame_number = frame;
             pt->entries[va.id].valid = true;
             
-            // Si el bonus está activo, registramos si esta primera operación fue una escritura
             if (config.use_dirty_pages) {
                 pt->entries[va.id].dirty = va.is_write;
             }
 
         } else {
-            return false; // Out of memory total
+            return false;
         }
     } else {
-        // La página YA estaba en memoria (Page Table Hit)
-        // Si el bonus está activo y la operación es una escritura, la ensuciamos
         if (config.use_dirty_pages && va.is_write) {
             pt->entries[va.id].dirty = true;
         }

@@ -7,6 +7,10 @@ static uint64_t get_rand_range(unsigned int *seedp, uint64_t max) {
     return rand_r(seedp) % max;
 }
 
+/**
+ * Genera direcciones virtuales de forma determinista basándose en una semilla.
+ * Soporta patrones de acceso uniforme y de localidad 80-20.
+ */
 virtual_addr_t generate_address(unsigned int *seedp) {
     virtual_addr_t addr = {0, 0, false};
     uint64_t max_id = (config.mode == MODE_SEG) ? config.segments : config.pages;
@@ -25,8 +29,7 @@ virtual_addr_t generate_address(unsigned int *seedp) {
     }
 
     if (config.mode == MODE_SEG) {
-        // Encontrar el límite máximo entre todos los segmentos
-        uint64_t max_limit = 4096; // Límite por defecto
+        uint64_t max_limit = 4096;
         if (config.seg_limits != NULL) {
             max_limit = config.seg_limits[0];
             for (int i = 1; i < config.segments; i++) {
@@ -35,15 +38,13 @@ virtual_addr_t generate_address(unsigned int *seedp) {
                 }
             }
         }
-        // Generamos el offset basado en el límite MÁS GRANDE posible
         addr.offset = get_rand_range(seedp, max_limit);
     } else {
         addr.offset = get_rand_range(seedp, config.page_size);
     }
-    // Lógica del Bonus Dirty Pages
-    addr.is_write = false; // Por defecto es solo lectura
+
+    addr.is_write = false; 
     if (config.use_dirty_pages) {
-        // Simulamos que el 25% de las operaciones de memoria son escrituras
         addr.is_write = (get_rand_range(seedp, 100) < 25);
     }
 
