@@ -3,17 +3,16 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 typedef enum { MODE_NONE, MODE_SEG, MODE_PAGE } sim_mode_t;
 typedef enum { WORKLOAD_UNIFORM, WORKLOAD_80_20 } workload_t;
 
-// Representa una dirección virtual dividida (Sirve para Seg y Page)
 typedef struct {
-    uint64_t id;      // Representa el seg_id o el VPN
-    uint64_t offset;  // El desplazamiento
+    uint64_t id;      
+    uint64_t offset;  
 } virtual_addr_t;
 
-// Estructura global de configuración
 typedef struct {
     sim_mode_t mode;
     int threads;
@@ -34,9 +33,20 @@ typedef struct {
     char evict_policy[16];
 } sim_config_t;
 
+// Estructura para métricas por hilo
+typedef struct {
+    int translations_ok;
+    int segfaults;
+} thread_stats_t;
+
 extern sim_config_t config;
 
-// Prototipo de generación de direcciones (implementado en workloads.c)
+// Variables globales para métricas y sincronización
+extern thread_stats_t *t_stats;
+extern uint64_t global_translations_ok;
+extern uint64_t global_segfaults;
+extern pthread_mutex_t global_stats_mutex;
+
 virtual_addr_t generate_address(unsigned int *seedp);
 
 #endif // SIMULATOR_H
