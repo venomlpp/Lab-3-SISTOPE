@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "simulator.h"
+#include "workloads.h"
 
 // Estructura de la entrada de segmento
 typedef struct {

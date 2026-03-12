@@ -7,6 +7,7 @@
 #include <time.h>
 #include <pthread.h>
 #include "simulator.h"
+#include "workloads.h"
 #include "segmentacion.h"
 
 // Inicialización de globales

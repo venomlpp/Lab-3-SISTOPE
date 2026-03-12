@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include "simulator.h"
+#include "workloads.h"
 
 static uint64_t get_rand_range(unsigned int *seedp, uint64_t max) {
     if (max == 0) return 0;
