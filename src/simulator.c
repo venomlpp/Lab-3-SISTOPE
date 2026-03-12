@@ -9,6 +9,8 @@
 #include "simulator.h"
 #include "workloads.h"
 #include "segmentacion.h"
+#include "paginacion.h"
+#include "frame_allocator.h"
 
 // Inicialización de globales
 sim_config_t config = {
@@ -86,30 +88,40 @@ void *thread_routine(void *arg) {
     free(arg); 
     
     unsigned int thread_seed = config.seed + thread_id; 
+    
     segment_table_t *seg_table = NULL;
+    page_table_t *page_table = NULL;
     
     if (config.mode == MODE_SEG) seg_table = init_segment_table();
+    else if (config.mode == MODE_PAGE) page_table = init_page_table();
 
     for (int i = 0; i < config.ops_per_thread; i++) {
         virtual_addr_t va = generate_address(&thread_seed);
+        bool success = false;
         
         if (config.mode == MODE_SEG) {
             uint64_t pa;
-            bool success = translate_segment(seg_table, va, &pa);
-            
-            // Actualizar métricas locales (sin lock, son privadas)
-            if (success) t_stats[thread_id].translations_ok++;
-            else t_stats[thread_id].segfaults++;
-
-            // Actualizar métricas globales (SECCIÓN CRÍTICA)
-            if (!config.unsafe) pthread_mutex_lock(&global_stats_mutex);
-            
-            if (success) global_translations_ok++;
-            else global_segfaults++;
-            
-            if (!config.unsafe) pthread_mutex_unlock(&global_stats_mutex);
+            success = translate_segment(seg_table, va, &pa);
+        } else if (config.mode == MODE_PAGE) {
+            uint64_t pa;
+            success = translate_page(page_table, va, &pa);
         }
+        
+        // Actualizar métricas locales
+        if (success) t_stats[thread_id].translations_ok++;
+        else t_stats[thread_id].segfaults++; // En paginación lo usaremos para fallos graves (Out of memory)
+
+        // Actualizar métricas globales (SECCIÓN CRÍTICA)
+        if (!config.unsafe) pthread_mutex_lock(&global_stats_mutex);
+        
+        if (success) global_translations_ok++;
+        else global_segfaults++;
+        
+        if (!config.unsafe) pthread_mutex_unlock(&global_stats_mutex);
     }
+    
+    if (config.mode == MODE_SEG) free_segment_table(seg_table);
+    else if (config.mode == MODE_PAGE) free_page_table(page_table);
     
     if (config.mode == MODE_SEG) free_segment_table(seg_table);
     return NULL;
@@ -118,6 +130,10 @@ void *thread_routine(void *arg) {
 int main(int argc, char *argv[]) {
     parse_arguments(argc, argv);
     t_stats = calloc(config.threads, sizeof(thread_stats_t));
+
+    if (config.mode == MODE_PAGE) {
+        init_frame_allocator();
+    }
 
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -154,11 +170,18 @@ int main(int argc, char *argv[]) {
         
         printf("\nMetricas Globales:\n");
         printf("Translations OK: %lu\n", global_translations_ok);
-        printf("Segfaults: %lu\n", global_segfaults);
-        
+        if (config.mode == MODE_SEG) {
+            printf("Segfaults: %lu\n", global_segfaults);
+        } else if (config.mode == MODE_PAGE) {
+            printf("Page Faults (Out of Memory): %lu\n", global_segfaults);
+        }
         printf("\nMetricas por Thread:\n");
         for(int i = 0; i < config.threads; i++){
-            printf("Thread %d: OK: %d | Segfaults: %d\n", i, t_stats[i].translations_ok, t_stats[i].segfaults);
+            if (config.mode == MODE_SEG) {
+                printf("Thread %d: OK: %d | Segfaults: %d\n", i, t_stats[i].translations_ok, t_stats[i].segfaults);
+            } else if (config.mode == MODE_PAGE) {
+                printf("Thread %d: OK: %d | Page Faults: %d\n", i, t_stats[i].translations_ok, t_stats[i].segfaults);
+            }
         }
         
         printf("\nTiempo total: %.4f segundos\n", runtime_sec);
@@ -194,6 +217,10 @@ int main(int argc, char *argv[]) {
         fprintf(f, "  \"runtime_sec\": %.4f\n", runtime_sec);
         fprintf(f, "}\n");
         fclose(f);
+    }
+
+    if (config.mode == MODE_PAGE) {
+        free_frame_allocator();
     }
 
     free(threads);
