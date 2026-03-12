@@ -6,13 +6,11 @@
 #include "simulator.h"
 #include "workloads.h"
 
-// Entrada de la tabla de páginas (PTE)
 typedef struct {
     int frame_number;
-    bool valid; // true si está en memoria (frame asignado)
+    bool valid; 
 } page_table_entry_t;
 
-// Tabla de páginas por hilo
 typedef struct {
     page_table_entry_t *entries;
     int num_pages;
@@ -20,6 +18,7 @@ typedef struct {
 
 page_table_t* init_page_table();
 void free_page_table(page_table_t *pt);
-bool translate_page(page_table_t *pt, virtual_addr_t va, uint64_t *pa);
+// Nueva firma que recibe el ID del hilo
+bool translate_page(int thread_id, page_table_t *pt, virtual_addr_t va, uint64_t *pa);
 
 #endif // PAGINACION_H
