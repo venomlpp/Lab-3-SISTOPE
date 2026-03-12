@@ -24,11 +24,20 @@ virtual_addr_t generate_address(unsigned int *seedp) {
     }
 
     if (config.mode == MODE_SEG) {
-        uint64_t limit = (config.seg_limits != NULL) ? config.seg_limits[addr.id] : 4096;
-        addr.offset = get_rand_range(seedp, limit);
+        // Encontrar el límite máximo entre todos los segmentos
+        uint64_t max_limit = 4096; // Límite por defecto
+        if (config.seg_limits != NULL) {
+            max_limit = config.seg_limits[0];
+            for (int i = 1; i < config.segments; i++) {
+                if ((uint64_t)config.seg_limits[i] > max_limit) {
+                    max_limit = config.seg_limits[i];
+                }
+            }
+        }
+        // Generamos el offset basado en el límite MÁS GRANDE posible
+        addr.offset = get_rand_range(seedp, max_limit);
     } else {
         addr.offset = get_rand_range(seedp, config.page_size);
     }
-
     return addr;
 }

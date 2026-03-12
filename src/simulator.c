@@ -3,6 +3,7 @@
 #include <string.h>
 #include <getopt.h>
 #include "simulator.h"
+#include "segmentacion.h"
 #include <pthread.h>
 
 // Inicializar con valores por defecto
@@ -68,7 +69,15 @@ void parse_arguments(int argc, char *argv[]) {
             case 'S': config.stats = true; break;
             case 'g': config.segments = atoi(optarg); break;
             case 'l':
-                // TODO: Parsear CSV de límites (lo haremos en un momento)
+                config.seg_limits = malloc(sizeof(int) * config.segments);
+                char *token = strtok(optarg, ",");
+                int idx = 0;
+                while (token != NULL && idx < config.segments) {
+                    config.seg_limits[idx++] = atoi(token);
+                    token = strtok(NULL, ",");
+                }
+                // Si faltaron valores en la lista, rellenar con el default 4096
+                while (idx < config.segments) config.seg_limits[idx++] = 4096;
                 break;
             case 'p': config.pages = atoi(optarg); break;
             case 'f': config.frames = atoi(optarg); break;
@@ -91,14 +100,37 @@ void *thread_routine(void *arg) {
     int thread_id = *(int *)arg;
     free(arg); 
     
-    // Semilla única por thread para reproducibilidad
     unsigned int thread_seed = config.seed + thread_id; 
+    
+    // Métricas locales de este hilo
+    int translations_ok = 0;
+    int segfaults = 0;
+
+    // Inicializar estructuras según el modo
+    segment_table_t *seg_table = NULL;
+    if (config.mode == MODE_SEG) {
+        seg_table = init_segment_table();
+    }
 
     for (int i = 0; i < config.ops_per_thread; i++) {
         virtual_addr_t va = generate_address(&thread_seed);
         
-        // Debug temporal para verificar que generan direcciones
-        // if (i == 0) printf("[Thread %d] Primera VA -> ID: %lu, Offset: %lu\n", thread_id, va.id, va.offset);
+        if (config.mode == MODE_SEG) {
+            uint64_t pa;
+            bool success = translate_segment(seg_table, va, &pa);
+            if (success) {
+                translations_ok++;
+            } else {
+                segfaults++;
+            }
+        }
+    }
+    
+    // Imprimir resultados del hilo
+    if (config.mode == MODE_SEG) {
+        printf("[Thread %d] Segmentacion -> OK: %d | Segfaults: %d\n", 
+               thread_id, translations_ok, segfaults);
+        free_segment_table(seg_table);
     }
     
     return NULL;
