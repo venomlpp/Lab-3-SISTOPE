@@ -8,6 +8,7 @@ typedef struct {
     uint64_t vpn;
     int frame_number;
     bool valid;
+    bool dirty;
 } tlb_entry_t;
 
 typedef struct {
@@ -20,8 +21,8 @@ typedef struct {
 
 tlb_t* init_tlb();
 void free_tlb(tlb_t *tlb);
-int tlb_lookup(tlb_t *tlb, uint64_t vpn);
-void tlb_insert(tlb_t *tlb, uint64_t vpn, int frame_number);
-void tlb_invalidate(tlb_t *tlb, uint64_t vpn);
+int tlb_lookup(tlb_t *tlb, uint64_t vpn, bool is_write);
+void tlb_insert(tlb_t *tlb, uint64_t vpn, int frame_number, bool is_write);
+bool tlb_invalidate(tlb_t *tlb, uint64_t vpn);
 
 #endif // TLB_H

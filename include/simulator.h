@@ -17,6 +17,7 @@ typedef struct {
     int seed;
     bool unsafe;
     bool stats;
+    bool use_dirty_pages; 
     
     int segments;
     int *seg_limits; 

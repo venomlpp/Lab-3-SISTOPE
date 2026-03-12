@@ -8,7 +8,7 @@ static uint64_t get_rand_range(unsigned int *seedp, uint64_t max) {
 }
 
 virtual_addr_t generate_address(unsigned int *seedp) {
-    virtual_addr_t addr = {0, 0};
+    virtual_addr_t addr = {0, 0, false};
     uint64_t max_id = (config.mode == MODE_SEG) ? config.segments : config.pages;
     
     bool use_hotspot = false;
@@ -40,5 +40,12 @@ virtual_addr_t generate_address(unsigned int *seedp) {
     } else {
         addr.offset = get_rand_range(seedp, config.page_size);
     }
+    // Lógica del Bonus Dirty Pages
+    addr.is_write = false; // Por defecto es solo lectura
+    if (config.use_dirty_pages) {
+        // Simulamos que el 25% de las operaciones de memoria son escrituras
+        addr.is_write = (get_rand_range(seedp, 100) < 25);
+    }
+
     return addr;
 }

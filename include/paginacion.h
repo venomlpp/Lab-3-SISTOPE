@@ -8,7 +8,8 @@
 
 typedef struct {
     int frame_number;
-    bool valid; 
+    bool valid;
+    bool dirty;
 } page_table_entry_t;
 
 typedef struct {

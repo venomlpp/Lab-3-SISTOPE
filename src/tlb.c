@@ -12,18 +12,12 @@ tlb_t* init_tlb() {
     return tlb;
 }
 
-void free_tlb(tlb_t *tlb) {
-    if (tlb) {
-        free(tlb->entries);
-        free(tlb);
-    }
-}
-
-// Retorna el frame si hay hit, o -1 si hay miss
-int tlb_lookup(tlb_t *tlb, uint64_t vpn) {
+int tlb_lookup(tlb_t *tlb, uint64_t vpn, bool is_write) {
     for (int i = 0; i < tlb->size; i++) {
         if (tlb->entries[i].valid && tlb->entries[i].vpn == vpn) {
             tlb->hits++;
+            // Si es un acierto y además es escritura, ensuciamos la página en caché
+            if (is_write) tlb->entries[i].dirty = true;
             return tlb->entries[i].frame_number;
         }
     }
@@ -31,22 +25,31 @@ int tlb_lookup(tlb_t *tlb, uint64_t vpn) {
     return -1;
 }
 
-// Inserta o reemplaza según FIFO circular
-void tlb_insert(tlb_t *tlb, uint64_t vpn, int frame_number) {
+void tlb_insert(tlb_t *tlb, uint64_t vpn, int frame_number, bool is_write) {
+    if (tlb->size == 0) return; // Evitamos división por cero
     tlb->entries[tlb->fifo_ptr].vpn = vpn;
     tlb->entries[tlb->fifo_ptr].frame_number = frame_number;
     tlb->entries[tlb->fifo_ptr].valid = true;
+    tlb->entries[tlb->fifo_ptr].dirty = is_write;
     
-    // Avanzar puntero FIFO
     tlb->fifo_ptr = (tlb->fifo_ptr + 1) % tlb->size;
 }
 
-// Para cuando el sistema global expulsa (evict) una página
-void tlb_invalidate(tlb_t *tlb, uint64_t vpn) {
+bool tlb_invalidate(tlb_t *tlb, uint64_t vpn) {
     for (int i = 0; i < tlb->size; i++) {
         if (tlb->entries[i].valid && tlb->entries[i].vpn == vpn) {
             tlb->entries[i].valid = false;
-            break;
+            return tlb->entries[i].dirty; // Retornamos si estaba sucia para avisar a la Page Table
         }
+    }
+    return false;
+}
+
+void free_tlb(tlb_t *tlb) {
+    if (tlb) {
+        if (tlb->entries) {
+            free(tlb->entries);
+        }
+        free(tlb);
     }
 }

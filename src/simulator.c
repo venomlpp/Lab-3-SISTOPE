@@ -14,7 +14,7 @@
 
 sim_config_t config = {
     .mode = MODE_NONE, .threads = 1, .ops_per_thread = 1000,
-    .workload = WORKLOAD_UNIFORM, .seed = 42, .unsafe = false, .stats = false,
+    .workload = WORKLOAD_UNIFORM, .seed = 42, .unsafe = false, .stats = false, .use_dirty_pages = false,
     .segments = 4, .seg_limits = NULL, .pages = 64, .frames = 32,
     .page_size = 4096, .tlb_size = 16
 };
@@ -45,7 +45,7 @@ void parse_arguments(int argc, char *argv[]) {
         {"seg-limits", required_argument, 0, 'l'}, {"pages", required_argument, 0, 'p'},
         {"frames", required_argument, 0, 'f'}, {"page-size", required_argument, 0, 'z'},
         {"tlb-size", required_argument, 0, 'b'}, {"tlb-policy", required_argument, 0, 'P'},
-        {"evict-policy", required_argument, 0, 'E'}, {0, 0, 0, 0}
+        {"evict-policy", required_argument, 0, 'E'}, {"dirty-pages", no_argument, 0, 'D'}, {0, 0, 0, 0}, 
     };
 
     while ((c = getopt_long(argc, argv, "", long_options, NULL)) != -1) {
@@ -80,6 +80,7 @@ void parse_arguments(int argc, char *argv[]) {
             case 'b': config.tlb_size = atoi(optarg); break;
             case 'P': strncpy(config.tlb_policy, optarg, 15); break;
             case 'E': strncpy(config.evict_policy, optarg, 15); break;
+            case 'D': config.use_dirty_pages = true; break;
             default: print_usage();
         }
     }
@@ -113,7 +114,7 @@ void *thread_routine(void *arg) {
             uint64_t pa;
             
             // 1. Intentar en la TLB (Caché rápida)
-            int frame = tlb_lookup(tlb, va.id);
+            int frame = tlb_lookup(tlb, va.id, va.is_write);
             if (frame != -1) {
                 pa = (frame * config.page_size) + va.offset;
                 success = true;
@@ -122,7 +123,7 @@ void *thread_routine(void *arg) {
                 success = translate_page(thread_id, page_table, va, &pa);
                 if (success) {
                     // 3. Si fue exitoso, guardar en TLB
-                    tlb_insert(tlb, va.id, page_table->entries[va.id].frame_number);
+                    tlb_insert(tlb, va.id, page_table->entries[va.id].frame_number, va.is_write);
                 }
             }
         }
@@ -195,6 +196,7 @@ int main(int argc, char *argv[]) {
         printf("Ops por thread: %d\n", config.ops_per_thread);
         printf("Workload: %s\n", config.workload == WORKLOAD_UNIFORM ? "uniform" : "80-20");
         printf("Seed: %d\n", config.seed);
+        printf("Dirty Pages: %s\n", config.use_dirty_pages ? "activo" : "no activo");
         
         printf("\nMetricas Globales:\n");
         printf("Translations OK: %lu\n", global_translations_ok);
@@ -222,6 +224,7 @@ int main(int argc, char *argv[]) {
         fprintf(f, "    \"workload\": \"%s\",\n", config.workload == WORKLOAD_UNIFORM ? "uniform" : "80-20");
         fprintf(f, "    \"seed\": %d,\n", config.seed);
         fprintf(f, "    \"unsafe\": %s\n", config.unsafe ? "true" : "false");
+        fprintf(f, "    \"use_dirty_pages\": %s\n", config.use_dirty_pages ? "true" : "false");
         fprintf(f, "  },\n");
         fprintf(f, "  \"metrics\": {\n");
         fprintf(f, "    \"translations_ok\": %lu,\n", global_translations_ok);

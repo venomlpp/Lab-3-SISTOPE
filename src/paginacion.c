@@ -40,14 +40,34 @@ bool translate_page(int thread_id, page_table_t *pt, virtual_addr_t va, uint64_t
         if (frame != -1) {
             // Si se expulsó a alguien, invalidar su Tabla de Páginas y su TLB
             if (evicted_thread != -1) {
+                
+                // ---- BONUS: LÓGICA DE DIRTY PAGES (WRITE-BACK) ----
+                // Si la opción está activa y la página expulsada estaba sucia, toma otros 2ms escribirla a disco
+                if (config.use_dirty_pages && global_pts[evicted_thread]->entries[evicted_vpn].dirty) {
+                    nanosleep(&req, NULL); 
+                }
+
                 global_pts[evicted_thread]->entries[evicted_vpn].valid = false;
+                global_pts[evicted_thread]->entries[evicted_vpn].dirty = false; // Limpiamos el estado
                 tlb_invalidate(global_tlbs[evicted_thread], evicted_vpn);
             }
 
             pt->entries[va.id].frame_number = frame;
             pt->entries[va.id].valid = true;
+            
+            // Si el bonus está activo, registramos si esta primera operación fue una escritura
+            if (config.use_dirty_pages) {
+                pt->entries[va.id].dirty = va.is_write;
+            }
+
         } else {
-            return false; // Out of memory total (No debería pasar gracias al Eviction)
+            return false; // Out of memory total
+        }
+    } else {
+        // La página YA estaba en memoria (Page Table Hit)
+        // Si el bonus está activo y la operación es una escritura, la ensuciamos
+        if (config.use_dirty_pages && va.is_write) {
+            pt->entries[va.id].dirty = true;
         }
     }
 
